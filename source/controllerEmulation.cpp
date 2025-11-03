@@ -3,6 +3,7 @@
 #include "scePadSettings.hpp"
 #include "controllerHotkey.hpp"
 #include <cmath>
+#include "inputBridge.hpp"
 
 int convertRange(int value, int oldMin, int oldMax, int newMin, int newMax) {
 	if (oldMin == oldMax) {
@@ -52,81 +53,97 @@ void Vigem::update360ByTarget(PVIGEM_TARGET Target, s_ScePadData& state) {
 }
 
 void Vigem::updateDs4ByTarget(PVIGEM_TARGET Target, s_ScePadData& state) {
+	// Default as Index 
+	auto st = InputBridge::instance().getState(0);
+
 	DS4_REPORT_EX report{};
-	report.Report.bThumbLX = state.LeftStick.X;
-	report.Report.bThumbLY = state.LeftStick.Y;
-	report.Report.bThumbRX = state.RightStick.X;
-	report.Report.bThumbRY = state.RightStick.Y;
+	// --- Analog sticks ---
+	report.Report.bThumbLX = static_cast<uint8_t>(st.analog["left_stick_x"] * 255);
+	report.Report.bThumbLY = static_cast<uint8_t>(st.analog["left_stick_y"] * 255);
+	report.Report.bThumbRX = static_cast<uint8_t>(st.analog["right_stick_x"] * 255);
+	report.Report.bThumbRY = static_cast<uint8_t>(st.analog["right_stick_y"] * 255);
 
+	// --- Digital Buttons ---
 	USHORT buttons = 0;
-	buttons = state.bitmask_buttons & SCE_BM_R3 ? buttons | 1 << 15 : buttons;
-	buttons = state.bitmask_buttons & SCE_BM_L3 ? buttons | 1 << 14 : buttons;
-	buttons = state.bitmask_buttons & SCE_BM_OPTIONS ? buttons | 1 << 13 : buttons;
-	buttons = state.bitmask_buttons & SCE_BM_SHARE ? buttons | 1 << 12 : buttons;
-	buttons = state.bitmask_buttons & SCE_BM_R2 ? buttons | 1 << 11 : buttons;
-	buttons = state.bitmask_buttons & SCE_BM_L2 ? buttons | 1 << 10 : buttons;
-	buttons = state.bitmask_buttons & SCE_BM_R1 ? buttons | 1 << 9 : buttons;
-	buttons = state.bitmask_buttons & SCE_BM_L1 ? buttons | 1 << 8 : buttons;
-	buttons = state.bitmask_buttons & SCE_BM_TRIANGLE ? buttons | 1 << 7 : buttons;
-	buttons = state.bitmask_buttons & SCE_BM_CIRCLE ? buttons | 1 << 6 : buttons;
-	buttons = state.bitmask_buttons & SCE_BM_CROSS ? buttons | 1 << 5 : buttons;
-	buttons = state.bitmask_buttons & SCE_BM_SQUARE ? buttons | 1 << 4 : buttons;
+	if (st.digital["r3"])        buttons |= 1 << 15;
+	if (st.digital["l3"])        buttons |= 1 << 14;
+	if (st.digital["options"])   buttons |= 1 << 13;
+	if (st.digital["share"])     buttons |= 1 << 12;
+	if (st.digital["r2_btn"])    buttons |= 1 << 11;
+	if (st.digital["l2_btn"])    buttons |= 1 << 10;
+	if (st.digital["r1"])        buttons |= 1 << 9;
+	if (st.digital["l1"])        buttons |= 1 << 8;
+	if (st.digital["triangle"])  buttons |= 1 << 7;
+	if (st.digital["circle"])    buttons |= 1 << 6;
+	if (st.digital["cross"])     buttons |= 1 << 5;
+	if (st.digital["square"])    buttons |= 1 << 4;
 
-	if (!(state.bitmask_buttons & SCE_BM_N_DPAD) && !(state.bitmask_buttons & SCE_BM_S_DPAD) && !(state.bitmask_buttons & SCE_BM_W_DPAD) && !(state.bitmask_buttons & SCE_BM_E_DPAD))
-		buttons |= 0x8;
-	else {
-		buttons &= ~0xF;
-		if ((state.bitmask_buttons & SCE_BM_S_DPAD) && (state.bitmask_buttons & SCE_BM_W_DPAD)) buttons |= (USHORT)DS4_BUTTON_DPAD_SOUTHWEST;
-		else if (state.bitmask_buttons & SCE_BM_S_DPAD && state.bitmask_buttons & SCE_BM_E_DPAD) buttons |= (USHORT)DS4_BUTTON_DPAD_SOUTHEAST;
-		else if (state.bitmask_buttons & SCE_BM_N_DPAD && state.bitmask_buttons & SCE_BM_E_DPAD) buttons |= (USHORT)DS4_BUTTON_DPAD_NORTHEAST;
-		else if (state.bitmask_buttons & SCE_BM_N_DPAD && state.bitmask_buttons & SCE_BM_W_DPAD) buttons |= (USHORT)DS4_BUTTON_DPAD_NORTHWEST;
-		else if (state.bitmask_buttons & SCE_BM_N_DPAD) buttons |= (USHORT)DS4_BUTTON_DPAD_NORTH;
-		else if (state.bitmask_buttons & SCE_BM_E_DPAD) buttons |= (USHORT)DS4_BUTTON_DPAD_EAST;
-		else if (state.bitmask_buttons & SCE_BM_S_DPAD) buttons |= (USHORT)DS4_BUTTON_DPAD_SOUTH;
-		else if (state.bitmask_buttons & SCE_BM_W_DPAD) buttons |= (USHORT)DS4_BUTTON_DPAD_WEST;
-	}
+	// --- D-pad ---
+	buttons &= ~0xF;
+	bool up = st.digital["dpad_up"];
+	bool down = st.digital["dpad_down"];
+	bool left = st.digital["dpad_left"];
+	bool right = st.digital["dpad_right"];
+
+	if (!up && !down && !left && !right)
+		buttons |= 0x8; // nötr
+	else if (down && left)  buttons |= (USHORT)DS4_BUTTON_DPAD_SOUTHWEST;
+	else if (down && right) buttons |= (USHORT)DS4_BUTTON_DPAD_SOUTHEAST;
+	else if (up && right)   buttons |= (USHORT)DS4_BUTTON_DPAD_NORTHEAST;
+	else if (up && left)    buttons |= (USHORT)DS4_BUTTON_DPAD_NORTHWEST;
+	else if (up)            buttons |= (USHORT)DS4_BUTTON_DPAD_NORTH;
+	else if (right)         buttons |= (USHORT)DS4_BUTTON_DPAD_EAST;
+	else if (down)          buttons |= (USHORT)DS4_BUTTON_DPAD_SOUTH;
+	else if (left)          buttons |= (USHORT)DS4_BUTTON_DPAD_WEST;
+
 	report.Report.wButtons = buttons;
 
+	// --- Specials ---
 	USHORT specialbuttons = 0;
-	specialbuttons = state.bitmask_buttons & SCE_BM_PSBTN ? specialbuttons | 1 << 0 : specialbuttons;
-	specialbuttons = state.bitmask_buttons & SCE_BM_TOUCH ? specialbuttons | 1 << 1 : specialbuttons;
+	if (st.digital["ps"])             specialbuttons |= 1 << 0;
+	if (st.digital["touchpad_click"]) specialbuttons |= 1 << 1;
 	report.Report.bSpecial = specialbuttons;
 
-	report.Report.bTriggerL = state.L2_Analog;
-	report.Report.bTriggerR = state.R2_Analog;
+	// --- Trigger Analogs ---
+	report.Report.bTriggerL = static_cast<uint8_t>(st.analog["left_trigger"] * 255);
+	report.Report.bTriggerR = static_cast<uint8_t>(st.analog["right_trigger"] * 255);
 	report.Report.bBatteryLvl = 100;
 
-	report.Report.sPreviousTouch[0] = report.Report.sCurrentTouch;
-
+	// --- Touchpad ---
 	static int packetNum = 0;
-	packetNum++;
-	if (packetNum > 255) packetNum = 0;
+	packetNum = (packetNum + 1) % 256;
 
 	DS4_TOUCH touch{};
 	touch.bPacketCounter = packetNum;
 
-	touch.bIsUpTrackingNum1 = state.touchData.touch[0].reserve[0] == 0 ? state.touchData.touch[0].id : (state.touchData.touch[0].id | 0x80);
-	touch.bTouchData1[0] = state.touchData.touch[0].x & 0xFF;
-	touch.bTouchData1[1] = state.touchData.touch[0].x >> 8 & 0x0F | state.touchData.touch[0].y << 4 & 0xF0;
-	touch.bTouchData1[2] = state.touchData.touch[0].y >> 4;
+	touch.bIsUpTrackingNum1 = 0; // isUp no need
+	touch.bTouchData1[0] = static_cast<uint16_t>(st.analog["touchpad1_x"] * 1920) & 0xFF;
+	touch.bTouchData1[1] = (static_cast<uint16_t>(st.analog["touchpad1_x"] * 1920) >> 8 & 0x0F) |
+		((static_cast<uint16_t>(st.analog["touchpad1_y"] * 1080) << 4) & 0xF0);
+	touch.bTouchData1[2] = static_cast<uint16_t>(st.analog["touchpad1_y"] * 1080) >> 4;
 
-	touch.bIsUpTrackingNum2 = state.touchData.touch[1].reserve[0] == 0 ? state.touchData.touch[1].id : (state.touchData.touch[1].id | 0x80);
-	touch.bTouchData2[0] = state.touchData.touch[1].x & 0xFF;
-	touch.bTouchData2[1] = state.touchData.touch[1].x >> 8 & 0x0F | state.touchData.touch[1].y << 4 & 0xF0;
-	touch.bTouchData2[2] = state.touchData.touch[1].y >> 4;
+	touch.bIsUpTrackingNum2 = 0;
+	touch.bTouchData2[0] = static_cast<uint16_t>(st.analog["touchpad2_x"] * 1920) & 0xFF;
+	touch.bTouchData2[1] = (static_cast<uint16_t>(st.analog["touchpad2_x"] * 1920) >> 8 & 0x0F) |
+		((static_cast<uint16_t>(st.analog["touchpad2_y"] * 1080) << 4) & 0xF0);
+	touch.bTouchData2[2] = static_cast<uint16_t>(st.analog["touchpad2_y"] * 1080) >> 4;
+
 	report.Report.sCurrentTouch = touch;
 
-	report.Report.wAccelX = state.acceleration.x;
-	report.Report.wAccelY = state.acceleration.y;
-	report.Report.wAccelZ = state.acceleration.z;
-	report.Report.wGyroX = state.angularVelocity.x;
-	report.Report.wGyroY = state.angularVelocity.z; // needs to be swapped for some reason
-	report.Report.wGyroZ = state.angularVelocity.y;
+	// --- Gyroscope and accelerometer---
+	report.Report.wAccelX = static_cast<SHORT>(st.analog["accel_x"] * 10000);
+	report.Report.wAccelY = static_cast<SHORT>(st.analog["accel_y"] * 10000);
+	report.Report.wAccelZ = static_cast<SHORT>(st.analog["accel_z"] * 10000);
+	report.Report.wGyroX = static_cast<SHORT>(st.analog["gyro_x"] * 1000);
+	report.Report.wGyroY = static_cast<SHORT>(st.analog["gyro_z"] * 1000); // swap
+	report.Report.wGyroZ = static_cast<SHORT>(st.analog["gyro_y"] * 1000);
 	report.Report.wTimestamp = state.timestamp / 16;
 
+	// --- Send ---
 	vigem_target_ds4_update_ex(m_vigemClient, Target, report);
 }
 #endif
+
 
 Vigem::Vigem(s_scePadSettings* scePadSettings, UDP& udp) : m_scePadSettings(scePadSettings), m_udp(udp) {
 #ifdef WINDOWS
@@ -285,6 +302,8 @@ void Vigem::emulatedControllerUpdate() {
 			if ((EmulatedController)m_scePadSettings[i].emulatedController != EmulatedController::NONE) {
 				s_ScePadData scePadState = {};
 				uint32_t result = scePadReadState(g_scePad[i], &scePadState);
+				InputBridge::instance().updateFromPs5(scePadState, i);
+
 
 				s_scePadSettings settingsToUse = (m_selectedController == i && m_udp.isActive()) ? m_udp.getSettings() : m_scePadSettings[i];
 				applyInputSettingsToScePadState(settingsToUse, scePadState);
