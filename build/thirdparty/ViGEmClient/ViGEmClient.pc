@@ -1,0 +1,11 @@
+prefix="/usr/local"
+exec_prefix="/usr/local"
+libdir=${exec_prefix}/lib
+includedir=${prefix}/include
+
+Name: ViGEmClient
+Description: ViGEmClient emulates Xbox 360 Controller and DS4 Controller for Windows using ViGEmBus.
+Version: 
+Libs: -L${libdir} -lViGEmClient
+Cflags: -I${includedir}
+
